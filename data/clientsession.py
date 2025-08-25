@@ -1,6 +1,8 @@
 import socket
 from datetime import datetime
 from dataclasses import dataclass
+
+from core.constants import DEFAULT_ROOM
  
 @dataclass
 class ClientSession:
@@ -10,3 +12,4 @@ class ClientSession:
     userName: str
     lastActive: datetime = None
     messageCount: int = 0
+    currentRoom: str = DEFAULT_ROOM
