@@ -1,2 +1,2 @@
 # py-chat
-A simple python chat program for exercise
+A simple python chat program for exercise and learning
