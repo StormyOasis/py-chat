@@ -6,7 +6,7 @@ from data.clientsession import ClientSession
 from data.room import Room
 from typing import List
 from argparse import ArgumentParser
-from utils.utils import generateDefaultUserName
+from utils.utils import generateDefaultUserName, handleCommandMessage
 import time
 
 class ChatServer:
@@ -51,9 +51,11 @@ class ChatServer:
                     break
                 session.lastActive = time.time()
                           
-                if(message.startswith("/quit")):
-                    # Don't wanna send the /quit to other users
-                    break                         
+                if(message.startswith("/")):
+                    # Don't wanna send commands to other users
+                    isQuit = handleCommandMessage(session, message, self.lock, self.rooms)
+                    if(isQuit):
+                        break
                 else:
                     newMessage = Message(session.userName, message.strip(), session.currentRoom)
                     self.sendAllInRoom(newMessage, session)
