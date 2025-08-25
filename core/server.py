@@ -6,6 +6,8 @@ from data.clientsession import ClientSession
 from data.room import Room
 from typing import List
 from argparse import ArgumentParser
+from utils.utils import generateDefaultUserName
+import time
 
 class ChatServer:
     # Chat server class for handling multiple client connections and message routing
@@ -25,7 +27,19 @@ class ChatServer:
             self.serverSocket.listen()
             print(f"Server listening on {self.host}:{self.port}")
             
-        
+        while True:
+            # It's a server, run forever or until stopped
+            conn, addr = self.serverSocket.accept()
+            print(f"New connection from {addr}")
+            session = ClientSession(connection=conn, address=str(addr), userName=f"{generateDefaultUserName()}", lastActive=None, messageCount=0)
+            session.lastActive = time.time()
+            self.sessions.append(session)
+            self.rooms[DEFAULT_ROOM].addUser(session)
+    
+            self.processClientConnection(session)
+    
+    def processClientConnection(self, session: ClientSession) -> None:
+        session.connection.sendall("Welcome to Py-Chat!\n".encode())
     
     def stop(self) -> None:
         if self.serverSocket is not None:
