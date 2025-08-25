@@ -1,6 +1,6 @@
 import socket
 import threading
-from core.constants import DEFAULT_BUFFER_SIZE, DEFAULT_TIMEOUT, DEFAULT_ROOM, DEFAULT_HOST, DEFAULT_PORT
+from core.constants import DEFAULT_BUFFER_SIZE, DEFAULT_TIMEOUT, DEFAULT_ROOM, DEFAULT_HOST, DEFAULT_PORT, DISCONNECT_FLAG
 from data.message import Message
 from data.clientsession import ClientSession
 from data.room import Room
@@ -15,7 +15,7 @@ class ChatServer:
     def __init__(self, host: str, port: int, timeout: int = DEFAULT_TIMEOUT):
         self.host = host
         self.port = port
-        self.timeout = timeout
+        self.idleTimeout = timeout
         self.sessions: List[ClientSession] = []
         self.rooms = {DEFAULT_ROOM: Room(DEFAULT_ROOM)}
         self.serverSocket: socket.socket = None
@@ -24,21 +24,36 @@ class ChatServer:
         self.lock = threading.Lock()
         if self.serverSocket is None:
             self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.serverSocket.bind((self.host, self.port))
             self.serverSocket.listen()
             print(f"Server listening on {self.host}:{self.port}")
             
+        # Start idle user checker
+        threading.Thread(target=self.handleIdledClients, daemon=True).start()
+                        
         while True:
             # It's a server, run forever or until stopped
             conn, addr = self.serverSocket.accept()
             print(f"New connection from {addr}")
-            session = ClientSession(connection=conn, address=str(addr), userName=f"{generateDefaultUserName()}", lastActive=None, messageCount=0)
+            session = ClientSession(connection=conn, address=str(addr), userName=f"{generateDefaultUserName()}", lastActive=None)
             session.lastActive = time.time()
-            self.sessions.append(session)
-            self.rooms[DEFAULT_ROOM].addUser(session)
+            with self.lock:
+                self.sessions.append(session)
+                self.rooms[DEFAULT_ROOM].addUser(session)
 
             # We need a thread per client connection
             threading.Thread(target=self.processClientConnection, args=(session,), daemon=True).start()
+    
+    def handleIdledClients(self) -> None:
+        while True:
+            time.sleep(10)  # Check every 10 seconds
+            currentTime = time.time()
+            with self.lock:
+                for session in self.sessions[:]:
+                    if currentTime - session.lastActive > self.idleTimeout:
+                        print(f"Disconnecting idle user {session.userName} from {session.address}")
+                        self.disconnectClient(session)
     
     def processClientConnection(self, session: ClientSession) -> None:
         # This is now in it's own thread
@@ -58,9 +73,8 @@ class ChatServer:
                         break
                 else:
                     newMessage = Message(session.userName, message.strip(), session.currentRoom)
-                    self.sendAllInRoom(newMessage, session)
-                    session.messageCount += 1                    
-            except ConnectionResetError:
+                    self.sendAllInRoom(newMessage, session)                 
+            except (ConnectionResetError, BrokenPipeError):
                 break
         
         self.disconnectClient(session)
@@ -68,20 +82,39 @@ class ChatServer:
     def sendAllInRoom(self, message: Message, session: ClientSession) -> None:
         # Send message to all clients in the specified room
         formattedMessage = message.format() + "\n"
-        for s in self.rooms[session.currentRoom].sessions:
-            if s != session:
-                s.connection.sendall(formattedMessage.encode())
+                
+        with self.lock:
+            room = self.rooms.get(session.currentRoom)
+            if not room:
+                return            
+            for s in room.getSessions():
+                if s != session:
+                    try:
+                        if not s.connection._closed:
+                            s.connection.sendall(formattedMessage.encode())
+                        else:
+                            self.disconnectClient(s)                            
+                    except Exception as e:
+                        print(f"Error sending message to {s.userName}: {e}")
+                        self.disconnectClient(s)
     
-    def disconnectClient(self, session: ClientSession) -> None:
-        print(f"Disconnecting {session.userName} from {session.address}")
-        session.connection.close()
-        
+    def disconnectClient(self, session: ClientSession) -> None:                                     
+        # Send disconnect message before closing
+        if not session.connection._closed:
+            try:
+                session.connection.sendall(DISCONNECT_FLAG.encode())
+                session.connection.close()  
+            except:
+                pass                  
+                
         # Now remove from the session list, but we're going to need a lock
         with self.lock:
             if session in self.sessions:
                 self.sessions.remove(session)
             if session.currentRoom in self.rooms:
-                self.rooms[session.currentRoom].removeUser(session)
+                self.rooms[session.currentRoom].removeUser(session)                  
+                
+        print(f"Disconnected {session.userName} from {session.address}") 
     
     def stop(self) -> None:
         if self.serverSocket is not None:

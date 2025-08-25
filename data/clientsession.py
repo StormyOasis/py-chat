@@ -11,5 +11,4 @@ class ClientSession:
     address: str
     userName: str
     lastActive: datetime = None
-    messageCount: int = 0
     currentRoom: str = DEFAULT_ROOM

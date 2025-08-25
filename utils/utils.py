@@ -1,6 +1,7 @@
 from typing import Dict
 import uuid
 
+from core.constants import HELP_FLAG, QUIT_FLAG, ROOM_FLAG, USER_FLAG
 from data.clientsession import ClientSession
 from data.room import Room
 
@@ -26,19 +27,19 @@ def handleCommandMessage(session: ClientSession, message: str, lock, rooms) -> b
     isQuit: bool = False
     
     try:    
-        if message.startswith("/quit"):
+        if message.startswith(QUIT_FLAG):
             session.connection.sendall("Goodbye!\n".encode())
             isQuit = True
-        elif message.startswith("/help"):
+        elif message.startswith(HELP_FLAG):
             helpMessage = (
                 "Available commands:\n"
-                "/help - Show this help message\n"
-                "/user <newname> - Change your username\n"
-                "/room <roomname> - Change your chat room\n"
-                "/quit - Disconnect from the server\n"
+                f"{HELP_FLAG} - Show this help message\n"
+                f"{USER_FLAG} <newname> - Change your username\n"
+                f"{ROOM_FLAG} <roomname> - Change your chat room\n"
+                f"{QUIT_FLAG} - Disconnect from the server\n"
             )
             session.connection.sendall(helpMessage.encode())
-        elif message.startswith("/user"):
+        elif message.startswith(USER_FLAG):
             parts = message.split(maxsplit=1)
             if(len(parts) == 2):
                 newName = parts[1].strip()
@@ -47,8 +48,8 @@ def handleCommandMessage(session: ClientSession, message: str, lock, rooms) -> b
                     session.userName = newName
                     session.connection.sendall(f"Username changed from {oldName} to {newName}\n".encode())
                 else:
-                    session.connection.sendall("Usage: /user <newname>\n".encode())
-        elif message.startswith("/room"):
+                    session.connection.sendall(f"Usage: {USER_FLAG} <newname>\n".encode())
+        elif message.startswith(ROOM_FLAG):
             parts = message.split(maxsplit=1)
             if(len(parts) == 2):
                 newRoom = parts[1].strip()
@@ -58,7 +59,7 @@ def handleCommandMessage(session: ClientSession, message: str, lock, rooms) -> b
                         changeRoom(session, newRoom, rooms)                    
                         session.connection.sendall(f"Room changed from {oldRoom} to {newRoom}\n".encode())
                 else:
-                    session.connection.sendall("Usage: /room <roomname>\n".encode())
+                    session.connection.sendall(f"Usage: {ROOM_FLAG} <roomname>\n".encode())
              
     except Exception as e: 
         print(f"Error handling command: {e}")
