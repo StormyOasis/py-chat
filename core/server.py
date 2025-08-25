@@ -14,14 +14,24 @@ class ChatServer:
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.sessions = List[ClientSession] = []
+        self.sessions: List[ClientSession] = []
         self.rooms = {DEFAULT_ROOM: Room(DEFAULT_ROOM)}
+        self.serverSocket: socket.socket = None
 
     def start(self) -> None:
-        pass
+        if self.serverSocket is None:
+            self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.serverSocket.bind((self.host, self.port))
+            self.serverSocket.listen()
+            print(f"Server listening on {self.host}:{self.port}")
+            
+        
     
     def stop(self) -> None:
-        pass
+        if self.serverSocket is not None:
+            self.serverSocket.close()
+            self.serverSocket = None
+            print("Server stopped")
     
 if __name__ == "__main__":
     parser = ArgumentParser(description="Start the server")
